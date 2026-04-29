@@ -732,14 +732,17 @@ async function loadCompras() {
     let totalPorcionesGuacamole = 0;
     confirmados.forEach(pedido => {
       (pedido.items || []).forEach(item => {
-        // Multiplicador según tipo de producto:
-        // - Picada Personal o individual: 1× cantidad
-        // - Picada para 2: 2× cantidad
-        // - Picada para 4: 4× cantidad
+        // Multiplicador según tipo de producto (detectado por el nombre):
+        // - Picada para 2 (o "2-3 personas"): 2× cantidad
+        // - Picada para 4 (o "4-5 personas"): 4× cantidad
+        // - Cualquier otro plato individual: 1× cantidad
         let multiplicador = 1;
         const nombre = (item.nombre || '').toLowerCase();
-        if (nombre.includes('picada para 2')) multiplicador = 2;
-        else if (nombre.includes('picada para 4')) multiplicador = 4;
+        if (nombre.includes('para 2') || nombre.includes('2-3') || nombre.includes('para dos')) {
+          multiplicador = 2;
+        } else if (nombre.includes('para 4') || nombre.includes('4-5') || nombre.includes('para cuatro')) {
+          multiplicador = 4;
+        }
 
         totalPorcionesGuacamole += item.cantidad * multiplicador;
 
