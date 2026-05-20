@@ -3,13 +3,17 @@
 // ============================================
 
 const PRODUCT_IMAGE_MAP = {
-  'Picada Personal': 'assets/picada-surtida.jpg',
+  'Picada de la Casa': 'assets/picadapersonal.jpeg',
+  'Picada Personal': 'assets/picadapersonal.jpeg',
   'Picada para 2': 'assets/picada-surtida.jpg',
+  'Picada para 2-3': 'assets/picada-surtida.jpg',
   'Picada para 4': 'assets/picada-surtida.jpg',
+  'Picada para 4-5': 'assets/picada-surtida.jpg',
   'Chicharronada': 'assets/chicharron-2.jpg',
   'Bondiola': 'assets/bondiola.jpg',
   'Costillitas': 'assets/costillas-1.jpg',
-  'Ceviche de Chicharrón': 'assets/chicharron-cortado.jpg'
+  'Costillitas Carnudas': 'assets/costillas-1.jpg',
+  'Guacamole': 'assets/guacamole.jpeg',
 };
 
 function resolveImage(item) {
@@ -28,7 +32,6 @@ async function loadConfig() {
     const { data } = await db.from('configuracion').select('*');
     if (data) {
       data.forEach(c => CONFIG[c.clave] = c.valor);
-      // Actualizar dirección del pickup si es diferente
       if (CONFIG.direccion_local) {
         const el = document.getElementById('pickup-address');
         if (el) el.textContent = CONFIG.direccion_local;
@@ -68,11 +71,11 @@ function renderCart() {
         <div class="cart-item-price">${formatPrice(item.precio)} c/u</div>
         <label class="cart-item-extra">
           <input type="checkbox" data-action="extra-guac" data-id="${item.id}" ${item.guacamole_extra ? 'checked' : ''} />
-          <span>+ Guacamole extra <strong>($3.000)</strong></span>
+          <span>+ Guacamole extra <strong>($1.500)</strong></span>
         </label>
       </div>
       <div class="cart-item-actions">
-        <div class="cart-item-subtotal">${formatPrice((item.precio + (item.guacamole_extra ? 3000 : 0)) * item.cantidad)}</div>
+        <div class="cart-item-subtotal">${formatPrice((item.precio + (item.guacamole_extra ? 1500 : 0)) * item.cantidad)}</div>
         <div class="qty-controls">
           <button class="qty-btn" data-action="dec" data-id="${item.id}">−</button>
           <span class="qty-value">${item.cantidad}</span>
@@ -115,7 +118,6 @@ function wireCartActions() {
 // ============================================
 
 function goToStep(n) {
-  // Validar carrito no vacío para avanzar a 2 o 3
   if (n >= 2 && Cart.get().length === 0) {
     showToast('Agrega al menos un producto antes de continuar', 'error');
     n = 1;
@@ -144,11 +146,28 @@ function goToStep(n) {
 
 function fillDateOptions() {
   const sel = document.getElementById('c-fecha');
-  const sundays = getNextSundays(2);
-  sel.innerHTML = sundays.map(d => {
+  const dates = getAvailableDates(4); // próximos 4 sáb/dom disponibles
+
+  if (dates.length === 0) {
+    sel.innerHTML = '<option value="">No hay fechas disponibles</option>';
+    return;
+  }
+
+  sel.innerHTML = dates.map(d => {
     const iso = formatDateISO(d);
     return `<option value="${iso}">${formatDateLong(d)}</option>`;
   }).join('');
+
+  // Mostrar aviso de cierre de pedidos para la fecha seleccionada
+  updateDeadlineHint();
+  sel.addEventListener('change', updateDeadlineHint);
+}
+
+function updateDeadlineHint() {
+  const sel = document.getElementById('c-fecha');
+  const hint = document.getElementById('fecha-deadline-hint');
+  if (!hint || !sel.value) return;
+  hint.textContent = getOrderDeadlineText(sel.value);
 }
 
 function fillTimeOptions() {
@@ -199,7 +218,6 @@ function wireCheckoutForm() {
     const errorEl = document.getElementById('checkout-error');
     errorEl.classList.remove('visible');
 
-    // Validar carrito
     const items = Cart.get();
     if (items.length === 0) {
       errorEl.textContent = 'Tu carrito está vacío.';
@@ -207,7 +225,6 @@ function wireCheckoutForm() {
       return;
     }
 
-    // Capturar datos
     const nombre = document.getElementById('c-nombre').value.trim();
     const telefonoRaw = document.getElementById('c-telefono').value.trim();
     const telefono = telefonoRaw.replace(/\D/g, '');
@@ -217,7 +234,6 @@ function wireCheckoutForm() {
     const hora = document.getElementById('c-hora').value;
     const obs = document.getElementById('c-obs').value.trim();
 
-    // Validaciones
     if (nombre.length < 3) {
       errorEl.textContent = 'Escribe tu nombre completo.';
       errorEl.classList.add('visible');
@@ -244,7 +260,7 @@ function wireCheckoutForm() {
 
     const total = Cart.total();
     const itemsPayload = items.map(i => {
-      const extraPrice = i.guacamole_extra ? 3000 : 0;
+      const extraPrice = i.guacamole_extra ? 1500 : 0; // $1.500
       const unitPrice = i.precio + extraPrice;
       return {
         id: i.id,
@@ -272,7 +288,6 @@ function wireCheckoutForm() {
 
       if (error) throw error;
 
-      // Guardar datos del pedido para mostrar banner en el index
       sessionStorage.setItem('albarril_order_success', JSON.stringify({
         nombre,
         telefono,
@@ -280,7 +295,6 @@ function wireCheckoutForm() {
         pedido_id: data?.id
       }));
       Cart.clear();
-      // Redirigir al menú principal
       window.location.href = 'index.html';
     } catch (err) {
       console.error(err);
@@ -290,36 +304,6 @@ function wireCheckoutForm() {
       errorEl.classList.add('visible');
     }
   });
-}
-
-// ============================================
-// STEP 3: Mostrar confirmación
-// ============================================
-
-function showConfirmation(data) {
-  // Mostrar número para verificación
-  const phoneDisplay = '+57 ' + data.telefono.replace(/^57/, '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
-  document.getElementById('confirm-phone').textContent = phoneDisplay;
-
-  // Resumen
-  const fechaDate = new Date(data.fecha + 'T00:00:00');
-  let html = `<div class="confirm-resumen-title">Resumen de tu pedido</div>`;
-  data.items.forEach(i => {
-    html += `<div class="confirm-resumen-line">
-      <span>${i.cantidad}× ${i.nombre}</span>
-      <span>${formatPrice(i.subtotal)}</span>
-    </div>`;
-  });
-  html += `<div class="confirm-resumen-line total">
-    <span>Total</span>
-    <span>${formatPrice(data.total)}</span>
-  </div>`;
-  html += `<div style="margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--smoke); font-size: 0.82rem;">
-    <div><strong style="color:var(--gold);">Entrega:</strong> ${formatDateLong(fechaDate)} · ${formatTime12h(data.hora)}</div>
-    <div><strong style="color:var(--gold);">Modalidad:</strong> ${data.modalidad === 'domicilio' ? 'Domicilio a ' + data.direccion : 'Recoger en ' + (CONFIG.direccion_local || 'el local')}</div>
-  </div>`;
-
-  document.getElementById('confirm-resumen').innerHTML = html;
 }
 
 // ============================================
