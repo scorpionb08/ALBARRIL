@@ -2,15 +2,18 @@
 // MAIN.JS - Lógica de la página principal
 // ============================================
 
-// Mapa de imágenes por producto (basado en el nombre)
 const PRODUCT_IMAGE_MAP = {
-  'Picada Personal': 'assets/picada-surtida.jpg',
+  'Picada de la Casa': 'assets/picadapersonal.jpeg',
+  'Picada Personal': 'assets/picadapersonal.jpeg',
   'Picada para 2': 'assets/picada-surtida.jpg',
+  'Picada para 2-3': 'assets/picada-surtida.jpg',
   'Picada para 4': 'assets/picada-surtida.jpg',
+  'Picada para 4-5': 'assets/picada-surtida.jpg',
   'Chicharronada': 'assets/chicharron-2.jpg',
   'Bondiola': 'assets/bondiola.jpg',
   'Costillitas': 'assets/costillas-1.jpg',
-  'Ceviche de Chicharrón': 'assets/chicharron-cortado.jpg'
+  'Costillitas Carnudas': 'assets/costillas-1.jpg',
+  'Guacamole': 'assets/guacamole.jpeg',
 };
 
 function resolveImage(product) {
@@ -51,6 +54,10 @@ function renderProductCard(p, index) {
   const qty = Cart.getQuantity(p.id);
   const hasExtra = Cart.hasExtra(p.id, 'guacamole_extra');
   const delay = index * 80;
+
+  // El guacamole no tiene opción de guacamole extra
+  const isGuacamole = p.nombre.toLowerCase().includes('guacamole');
+
   return `
     <article class="product-card" data-id="${p.id}" style="transition-delay: ${delay}ms;">
       <div class="product-image-wrap">
@@ -66,10 +73,11 @@ function renderProductCard(p, index) {
             ${renderAction(p, qty)}
           </div>
         </div>
+        ${!isGuacamole ? `
         <label class="product-extra ${qty > 0 ? 'visible' : ''}" data-extra-for="${p.id}">
           <input type="checkbox" data-action="extra-guac" data-id="${p.id}" ${hasExtra ? 'checked' : ''} />
-          <span>+ Guacamole extra <strong>($3.000)</strong></span>
-        </label>
+          <span>+ Guacamole extra <strong>($1.500)</strong></span>
+        </label>` : ''}
       </div>
     </article>
   `;
@@ -95,12 +103,10 @@ function renderAction(product, qty) {
 
 function wireProductCards() {
   document.querySelectorAll('.product-card').forEach(card => {
-    // Checkbox de extra (cambio)
     card.querySelectorAll('input[data-action="extra-guac"]').forEach(input => {
       input.addEventListener('change', () => {
         const id = Number(input.dataset.id);
         if (Cart.getQuantity(id) === 0) {
-          // Si no está en carrito, no permitir el toggle
           input.checked = false;
           showToast('Primero agrega el producto al carrito', 'error');
           return;
@@ -109,7 +115,6 @@ function wireProductCards() {
       });
     });
 
-    // Botones de acción (clicks)
     card.querySelectorAll('.product-action').forEach(container => {
       container.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-action]');
@@ -146,7 +151,6 @@ function updateExtraVisibility(id) {
     extraLabel.classList.add('visible');
   } else {
     extraLabel.classList.remove('visible');
-    // Si lo quita del carrito, también desmarca el checkbox visualmente
     const checkbox = extraLabel.querySelector('input');
     if (checkbox) checkbox.checked = false;
   }
@@ -156,8 +160,34 @@ function refreshCardAction(id) {
   const container = document.querySelector(`.product-action[data-id="${id}"]`);
   if (!container) return;
   const qty = Cart.getQuantity(id);
-  // Pasamos solo el id como "producto dummy" para render
   container.innerHTML = renderAction({ id }, qty);
+}
+
+// ============================================
+// BANNER DE CIERRE DE PEDIDOS
+// Muestra un aviso en el menú de hasta cuándo se puede pedir
+// ============================================
+
+function showOrderWindowBanner() {
+  const dates = getAvailableDates(2);
+  if (dates.length === 0) return;
+
+  const next = dates[0];
+  const iso = formatDateISO(next);
+  const msg = getOrderDeadlineText(iso);
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const dayName = dias[next.getDay()];
+  const dayCapitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+
+  const banner = document.createElement('div');
+  banner.className = 'order-window-banner';
+  banner.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span><strong>${dayCapitalized} ${next.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][next.getMonth()]}</strong> — ${msg}</span>
+  `;
+
+  const menuSection = document.getElementById('menu');
+  if (menuSection) menuSection.insertAdjacentElement('afterbegin', banner);
 }
 
 // ============================================
@@ -206,7 +236,6 @@ function wireLogin() {
   const form = document.getElementById('login-form');
   const errorEl = document.getElementById('login-error');
 
-  // Si ya está logueado, ir directo al admin
   btn.addEventListener('click', () => {
     if (Auth.isLoggedIn()) {
       window.location.href = 'admin.html';
@@ -229,12 +258,12 @@ function wireLogin() {
     errorEl.classList.remove('visible');
     const user = document.getElementById('login-user').value.trim();
     const pass = document.getElementById('login-pass').value;
-    const btn = form.querySelector('button[type=submit]');
-    btn.disabled = true;
-    btn.textContent = 'Verificando...';
+    const submitBtn = form.querySelector('button[type=submit]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Verificando...';
     const ok = await Auth.login(user, pass);
-    btn.disabled = false;
-    btn.textContent = 'Ingresar';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Ingresar';
     if (ok) {
       window.location.href = 'admin.html';
     } else {
@@ -245,7 +274,7 @@ function wireLogin() {
 }
 
 // ============================================
-// CARGAR CONFIGURACIÓN (contacto, redes)
+// CARGAR CONFIGURACIÓN
 // ============================================
 
 async function loadConfig() {
@@ -255,13 +284,11 @@ async function loadConfig() {
     const map = {};
     data.forEach(c => map[c.clave] = c.valor);
 
-    // Enlaces sociales
     const ig = document.getElementById('nav-instagram');
     const wa = document.getElementById('nav-whatsapp');
     if (map.instagram && ig) ig.href = `https://instagram.com/${map.instagram.replace('@', '')}`;
     if (map.whatsapp && wa) wa.href = `https://wa.me/${map.whatsapp.replace(/\D/g, '')}`;
 
-    // Footer
     const direccion = document.getElementById('footer-direccion');
     const correo = document.getElementById('footer-correo');
     if (map.direccion_local && direccion) {
@@ -290,7 +317,7 @@ function showToast(msg, type = 'success') {
 }
 
 // ============================================
-// BANNER DE PEDIDO EXITOSO (después de checkout)
+// BANNER DE PEDIDO EXITOSO
 // ============================================
 
 function showOrderSuccessBanner() {
@@ -325,17 +352,13 @@ function showOrderSuccessBanner() {
       </div>
     `;
     document.body.appendChild(banner);
-
-    // Animación de entrada
     requestAnimationFrame(() => banner.classList.add('visible'));
 
-    // Cerrar manual
     banner.querySelector('.success-banner-close').addEventListener('click', () => {
       banner.classList.remove('visible');
       setTimeout(() => banner.remove(), 400);
     });
 
-    // Auto-cerrar a los 15 segundos
     setTimeout(() => {
       if (document.body.contains(banner)) {
         banner.classList.remove('visible');
@@ -356,6 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
   wireNavbar();
   wireLogin();
   loadConfig();
-  loadProducts();
+  loadProducts().then(() => showOrderWindowBanner());
   showOrderSuccessBanner();
 });
