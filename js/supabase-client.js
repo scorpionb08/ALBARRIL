@@ -9,10 +9,9 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ============================================
-// CARRITO (POR SESIÓN - FIX)
+// CARRITO (POR SESIÓN)
 // ============================================
 
-// Generar ID único por cliente (solo por sesión)
 function getSessionId() {
   let id = sessionStorage.getItem('albarril_session');
   if (!id) {
@@ -43,7 +42,6 @@ const Cart = {
   add(product) {
     const items = this.get();
     const existing = items.find(i => i.id === product.id);
-
     if (existing) {
       existing.cantidad += 1;
     } else {
@@ -56,7 +54,6 @@ const Cart = {
         cantidad: 1
       });
     }
-
     this.save(items);
   },
 
@@ -70,14 +67,12 @@ const Cart = {
   decrement(id) {
     const items = this.get();
     const item = items.find(i => i.id === id);
-
     if (item) {
       item.cantidad -= 1;
       if (item.cantidad <= 0) {
         return this.save(items.filter(i => i.id !== id));
       }
     }
-
     this.save(items);
   },
 
@@ -88,9 +83,7 @@ const Cart = {
   toggleExtra(id, extraName) {
     const items = this.get();
     const item = items.find(i => i.id === id);
-    if (item) {
-      item[extraName] = !item[extraName];
-    }
+    if (item) item[extraName] = !item[extraName];
     this.save(items);
   },
 
@@ -104,7 +97,7 @@ const Cart = {
 
   total() {
     return this.get().reduce((sum, i) => {
-      const extra = i.guacamole_extra ? 3000 : 0;
+      const extra = i.guacamole_extra ? 1500 : 0; // Guacamole extra $1.500
       return sum + ((i.precio + extra) * i.cantidad);
     }, 0);
   },
@@ -123,9 +116,7 @@ const Cart = {
     const badge = document.getElementById('cart-badge');
     const fab = document.getElementById('cart-fab');
     if (!badge || !fab) return;
-
     const count = this.count();
-
     if (count > 0) {
       badge.textContent = count;
       fab.classList.add('visible');
@@ -134,7 +125,6 @@ const Cart = {
     }
   }
 };
-
 
 // ============================================
 // AUTH ADMIN (simple, client-side)
@@ -165,7 +155,6 @@ const Auth = {
     if (!session) return false;
     try {
       const { ts } = JSON.parse(session);
-      // Sesión válida por 8 horas
       if (Date.now() - ts > 8 * 60 * 60 * 1000) {
         sessionStorage.removeItem('albarril_admin');
         return false;
@@ -188,23 +177,48 @@ function formatPrice(price) {
   return '$' + Math.round(price).toLocaleString('es-CO');
 }
 
-function getNextSundays(count = 2) {
-  const sundays = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  let current = new Date(today);
-  // Ir al próximo domingo (día 0). Si hoy es domingo, cuenta hoy como el próximo.
-  const daysUntilSunday = (7 - current.getDay()) % 7;
-  current.setDate(current.getDate() + (daysUntilSunday === 0 ? 0 : daysUntilSunday));
-  // Si hoy es domingo y ya pasó la hora límite (5pm), saltar al siguiente
-  if (daysUntilSunday === 0 && new Date().getHours() >= 17) {
-    current.setDate(current.getDate() + 7);
+// ============================================
+// FECHAS DISPONIBLES
+// Lógica: sábados y domingos disponibles.
+// Corte de pedidos: día anterior hasta medianoche (23:59).
+// Es decir, el mismo día de servicio NO se puede pedir.
+// ============================================
+
+/**
+ * Devuelve los próximos `count` días que sean sábado (6) o domingo (0),
+ * ordenados cronológicamente, excluyendo los que ya cerraron (es decir,
+ * si hoy es sábado o domingo, ese día ya no aparece porque el corte
+ * fue ayer a medianoche).
+ */
+function getAvailableDates(count = 4) {
+  const results = [];
+  const now = new Date();
+  // Hora actual en Colombia (UTC-5)
+  // Usamos hora local del navegador (que debería estar en Colombia)
+  
+  // Empezamos desde mañana, porque el corte es día anterior medianoche
+  // Si hoy es viernes y son las 10pm, mañana sábado aún aparece
+  // Si hoy es sábado (mismo día de servicio), ya no aparece el sábado de hoy
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(0, 0, 0, 0);
+
+  let current = new Date(now);
+  current.setHours(0, 0, 0, 0);
+
+  // Avanzamos hasta encontrar `count` sábados/domingos futuros
+  // Un día es válido si: es sábado o domingo Y es al menos mañana
+  // (el mismo día de servicio no se puede pedir — corte fue medianoche anterior)
+  let checked = 0;
+  while (results.length < count && checked < 60) {
+    const day = current.getDay(); // 0=domingo, 6=sábado
+    if ((day === 0 || day === 6) && current >= tomorrow) {
+      results.push(new Date(current));
+    }
+    current.setDate(current.getDate() + 1);
+    checked++;
   }
-  for (let i = 0; i < count; i++) {
-    sundays.push(new Date(current));
-    current.setDate(current.getDate() + 7);
-  }
-  return sundays;
+  return results;
 }
 
 function formatDateLong(date) {
@@ -237,4 +251,21 @@ function formatTime12h(time24) {
   const period = h >= 12 ? 'PM' : 'AM';
   const h12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
   return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+/**
+ * Devuelve un string recordatorio de hasta cuándo se puede pedir
+ * para una fecha dada (ISO string YYYY-MM-DD).
+ * Ej: "Pedidos para el sábado 24 de mayo cierran el viernes 23 a medianoche."
+ */
+function getOrderDeadlineText(isoDate) {
+  const [y, mo, d] = isoDate.split('-').map(Number);
+  const serviceDate = new Date(y, mo - 1, d);
+  const deadline = new Date(serviceDate);
+  deadline.setDate(deadline.getDate() - 1);
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  const dayName = dias[serviceDate.getDay()];
+  const deadlineName = dias[deadline.getDay()];
+  return `Pedidos para el ${dayName} cierran el ${deadlineName} ${deadline.getDate()} de ${meses[deadline.getMonth()]} a medianoche.`;
 }
