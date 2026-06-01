@@ -55,7 +55,6 @@ function renderProductCard(p, index) {
   const hasExtra = Cart.hasExtra(p.id, 'guacamole_extra');
   const delay = index * 80;
 
-  // El guacamole no tiene opción de guacamole extra
   const isGuacamole = p.nombre.toLowerCase().includes('guacamole');
 
   return `
@@ -161,33 +160,6 @@ function refreshCardAction(id) {
   if (!container) return;
   const qty = Cart.getQuantity(id);
   container.innerHTML = renderAction({ id }, qty);
-}
-
-// ============================================
-// BANNER DE CIERRE DE PEDIDOS
-// Muestra un aviso en el menú de hasta cuándo se puede pedir
-// ============================================
-
-function showOrderWindowBanner() {
-  const dates = getAvailableDates(2);
-  if (dates.length === 0) return;
-
-  const next = dates[0];
-  const iso = formatDateISO(next);
-  const msg = getOrderDeadlineText(iso);
-  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-  const dayName = dias[next.getDay()];
-  const dayCapitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-
-  const banner = document.createElement('div');
-  banner.className = 'order-window-banner';
-  banner.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span><strong>${dayCapitalized} ${next.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][next.getMonth()]}</strong> — ${msg}</span>
-  `;
-
-  const menuSection = document.getElementById('menu');
-  if (menuSection) menuSection.insertAdjacentElement('afterbegin', banner);
 }
 
 // ============================================
@@ -379,6 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
   wireNavbar();
   wireLogin();
   loadConfig();
-  loadProducts().then(() => showOrderWindowBanner());
+  loadProducts();
   showOrderSuccessBanner();
 });
