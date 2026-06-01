@@ -146,7 +146,7 @@ function goToStep(n) {
 
 function fillDateOptions() {
   const sel = document.getElementById('c-fecha');
-  const dates = getAvailableDates(4); // próximos 4 sáb/dom disponibles
+  const dates = getAvailableDates(4);
 
   if (dates.length === 0) {
     sel.innerHTML = '<option value="">No hay fechas disponibles</option>';
@@ -157,17 +157,6 @@ function fillDateOptions() {
     const iso = formatDateISO(d);
     return `<option value="${iso}">${formatDateLong(d)}</option>`;
   }).join('');
-
-  // Mostrar aviso de cierre de pedidos para la fecha seleccionada
-  updateDeadlineHint();
-  sel.addEventListener('change', updateDeadlineHint);
-}
-
-function updateDeadlineHint() {
-  const sel = document.getElementById('c-fecha');
-  const hint = document.getElementById('fecha-deadline-hint');
-  if (!hint || !sel.value) return;
-  hint.textContent = getOrderDeadlineText(sel.value);
 }
 
 function fillTimeOptions() {
@@ -260,7 +249,7 @@ function wireCheckoutForm() {
 
     const total = Cart.total();
     const itemsPayload = items.map(i => {
-      const extraPrice = i.guacamole_extra ? 1500 : 0; // $1.500
+      const extraPrice = i.guacamole_extra ? 1500 : 0;
       const unitPrice = i.precio + extraPrice;
       return {
         id: i.id,
